@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}판매 이력{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="page-header">
+        <h4><i class="bi bi-receipt" style="color:var(--pos-primary);"></i> 판매 이력</h4>
+    </div>
+
+    <!-- 날짜 필터 -->
+    <div class="card card-pos p-3 mb-3">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">시작일</label>
+                <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">종료일</label>
+                <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-pos w-100">조회</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 판매 목록 -->
+    <div class="card card-pos">
+        <div class="table-responsive">
+            <table class="table table-pos table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>일시</th>
+                        <th class="text-end">금액</th>
+                        <th>결제</th>
+                        <th>상태</th>
+                        <th>관리</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in sales %}
+                    <tr class="{% if s.is_refunded %}table-secondary{% endif %}">
+                        <td>{{ s.id }}</td>
+                        <td>{{ s.sale_date }}</td>
+                        <td class="text-end fw-bold">{{ "₩{:,.0f}".format(s.total_amount) }}</td>
+                        <td>
+                            {% if s.payment_method == 'cash' %}
+                                <span class="badge bg-success">현금</span>
+                            {% elif s.payment_method == 'card' %}
+                                <span class="badge bg-primary">카드</span>
+                            {% else %}
+                                <span class="badge bg-secondary">혼합</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if s.is_refunded %}
+                                <span class="badge bg-danger">환불</span>
+                            {% else %}
+                                <span class="badge bg-success">완료</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/sales/{{ s.id }}" class="btn btn-sm btn-outline-primary">상세</a>
+                            <a href="/sales/{{ s.id }}/receipt" target="_blank" class="btn btn-sm btn-outline-secondary">영수증</a>
+                            {% if not s.is_refunded %}
+                            <button class="btn btn-sm btn-outline-danger" onclick="refundSale({{ s.id }})">환불</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not sales %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">판매 이력이 없습니다</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if total_pages > 1 %}
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center">
+            {% for p in range(1, total_pages + 1) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="?page={{ p }}&date_from={{ date_from }}&date_to={{ date_to }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function refundSale(id) {
+        if (!confirm('이 거래를 환불 처리하시겠습니까?\n재고가 복구됩니다.')) return;
+        const res = await fetch(`/api/sales/${id}/refund`, {method: 'POST'});
+        const result = await res.json();
+        if (result.success) {
+            showToast('완료', '환불 처리되었습니다', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('오류', result.error || '환불 실패', 'error');
+        }
+    }
+</script>
+{% endblock %}

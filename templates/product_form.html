@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{% if product %}상품 수정{% else %}상품 등록{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 700px;">
+    <h4 class="mb-4">{% if product %}상품 수정{% else %}상품 등록{% endif %}</h4>
+
+    <form method="POST" class="card card-pos p-4">
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="form-label fw-bold">상품명 *</label>
+                <input type="text" name="name" class="form-control" required
+                       value="{{ product.name if product else '' }}" placeholder="예: 십자 피스 4x30mm">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label fw-bold">카테고리</label>
+                <select name="category_id" class="form-select">
+                    <option value="">선택안함</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}"
+                        {% if product and product.category_id == cat.id %}selected{% endif %}>
+                        {{ cat.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label fw-bold">바코드</label>
+                <input type="text" name="barcode" class="form-control"
+                       value="{{ product.barcode if product and product.barcode else '' }}"
+                       placeholder="바코드 스캔 또는 직접 입력">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label fw-bold">판매 단위 *</label>
+                <select name="unit_type" class="form-select">
+                    {% for key, ut in unit_types.items() %}
+                    <option value="{{ key }}"
+                        {% if product and product.unit_type == key %}selected{% endif %}>
+                        {{ ut.label }} ({{ key }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label fw-bold">판매가 (원) *</label>
+                <input type="number" name="price" class="form-control" required min="0" step="10"
+                       value="{{ product.price if product else '' }}" placeholder="0">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label fw-bold">원가 (원)</label>
+                <input type="number" name="cost_price" class="form-control" min="0" step="10"
+                       value="{{ product.cost_price if product else '0' }}" placeholder="0">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label fw-bold">현재 재고</label>
+                <input type="number" name="stock_quantity" class="form-control" min="0" step="0.1"
+                       value="{{ product.stock_quantity if product else '0' }}">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label fw-bold">최소 재고 (알림)</label>
+                <input type="number" name="min_stock" class="form-control" min="0" step="0.1"
+                       value="{{ product.min_stock if product else '0' }}">
+            </div>
+
+            <div class="col-12">
+                <hr>
+                <h6>도매가 설정 <small class="text-muted">(선택)</small></h6>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">도매 기준 수량</label>
+                <input type="number" name="bulk_threshold" class="form-control" min="1"
+                       value="{{ product.bulk_threshold if product and product.bulk_threshold else '' }}"
+                       placeholder="예: 100">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">도매 단가 (원)</label>
+                <input type="number" name="bulk_price" class="form-control" min="0" step="10"
+                       value="{{ product.bulk_price if product and product.bulk_price else '' }}"
+                       placeholder="예: 35">
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">메모</label>
+                <textarea name="memo" class="form-control" rows="2">{{ product.memo if product else '' }}</textarea>
+            </div>
+
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-pos">
+                    {% if product %}수정 완료{% else %}등록{% endif %}
+                </button>
+                <a href="/products" class="btn btn-secondary btn-pos">취소</a>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

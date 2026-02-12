@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}거래 상세 #{{ sale.id }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 700px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4>거래 상세 #{{ sale.id }}</h4>
+        <div>
+            <a href="/sales/{{ sale.id }}/receipt" target="_blank" class="btn btn-outline-primary btn-pos">영수증 인쇄</a>
+            <a href="/sales" class="btn btn-secondary btn-pos">목록</a>
+        </div>
+    </div>
+
+    <div class="card card-pos p-4">
+        <!-- 거래 정보 -->
+        <div class="row mb-3">
+            <div class="col-6">
+                <small class="text-muted">거래일시</small>
+                <div class="fw-bold">{{ sale.sale_date }}</div>
+            </div>
+            <div class="col-6 text-end">
+                <small class="text-muted">상태</small>
+                <div>
+                    {% if sale.is_refunded %}
+                        <span class="badge bg-danger fs-6">환불됨</span>
+                    {% else %}
+                        <span class="badge bg-success fs-6">완료</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- 상품 목록 -->
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>상품명</th>
+                    <th class="text-center">수량</th>
+                    <th class="text-end">단가</th>
+                    <th class="text-end">소계</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item.product_name }}
+                        {% if item.is_bulk %}<span class="badge-bulk">도매가</span>{% endif %}
+                    </td>
+                    <td class="text-center">{{ item.quantity }} {{ unit_types[item.unit_type].label if item.unit_type in unit_types else item.unit_type }}</td>
+                    <td class="text-end">{{ "₩{:,.0f}".format(item.unit_price) }}</td>
+                    <td class="text-end fw-bold">{{ "₩{:,.0f}".format(item.subtotal) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <hr>
+
+        <!-- 결제 정보 -->
+        <div class="row">
+            <div class="col-6">
+                <div class="mb-2">
+                    <small class="text-muted">결제 방법</small>
+                    <div class="fw-bold">
+                        {% if sale.payment_method == 'cash' %}현금
+                        {% elif sale.payment_method == 'card' %}카드
+                        {% else %}혼합{% endif %}
+                    </div>
+                </div>
+                {% if sale.cash_amount > 0 %}
+                <div class="mb-1"><small class="text-muted">현금:</small> {{ "₩{:,.0f}".format(sale.cash_amount) }}</div>
+                {% endif %}
+                {% if sale.card_amount > 0 %}
+                <div class="mb-1"><small class="text-muted">카드:</small> {{ "₩{:,.0f}".format(sale.card_amount) }}</div>
+                {% endif %}
+                {% if sale.change_amount > 0 %}
+                <div><small class="text-muted">거스름돈:</small> {{ "₩{:,.0f}".format(sale.change_amount) }}</div>
+                {% endif %}
+            </div>
+            <div class="col-6 text-end">
+                <small class="text-muted">합계</small>
+                <div class="total-display">{{ "₩{:,.0f}".format(sale.total_amount) }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
