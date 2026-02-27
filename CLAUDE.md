@@ -2,44 +2,49 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# 절대 규칙
+모든 의사결정은 사용자인 주인님한테 물어본다
+
 ## 프로젝트 개요
-철물점 전용 웹 기반 POS(Point of Sale) 시스템. Flask + SQLite + Bootstrap 5로 구축.
+SaaS 멀티테넌트 POS 시스템. 기술 스택과 요구사항은 spec.md, 구현 계획은 plan.md 참조.
 
-## 실행 방법
-```bash
-pip install flask
-python pos.py
-# http://localhost:5000 접속
-```
+## 핵심 규칙 (코드 작성 시 반드시 준수)
 
-샘플 데이터 등록: `python setup_sample_data.py`
+### 멀티테넌트 데이터 격리
+- Row-Level 격리: 모든 테이블에 `store_id` FK
+- 모든 쿼리에 store 필터 필수
+- API에서 사용자의 가게 소속 여부 검증
 
-## 아키텍처
-```
-pos.py          ← Flask 앱 + 모든 라우트 (페이지 + API)
-config.py       ← 설정 상수, 단위 유형, 기본 카테고리
-database.py     ← SQLite 스키마 정의, get_db(), init_db(), backup_db()
-models.py       ← 모든 데이터 액세스 함수 (ORM 없이 순수 SQL)
-```
+### 금액 처리
+- DB: DecimalField (정수, 원 단위). **float 사용 금지.**
+- 프론트: 천 단위 콤마 + ₩ 기호
+- 수량: DecimalField (소수점 허용 — m, kg, L 등)
 
-- **DB**: SQLite (`pos_data.db`), 테이블: categories, products, sales, sale_items, daily_summary
-- **Frontend**: Jinja2 템플릿 + Bootstrap 5 (로컬 번들) + Chart.js
-- **오프라인 동작**: 모든 정적 파일이 `static/`에 포함, CDN 의존 없음
+### VAT
+- 소비자가(부가세 포함) 기준 입력
+- 공급가 = 합계 ÷ 1.1, 부가세 = 합계 - 공급가
+- sale_items에 supply_amount, vat_amount 저장
 
-## 핵심 패턴
-- DB 연결은 함수마다 `get_db()` 호출 후 `finally: db.close()` (ORM 없음)
-- 상품 삭제는 소프트 삭제 (`is_active = 0`)
-- `sale_items`에 상품명/단가 스냅샷 저장 (비정규화)
-- 수량은 REAL 타입 (미터/kg 소수점 지원)
-- 도매가: `bulk_threshold` + `bulk_price` 두 필드로 처리
+### 인증 플로우
+- **회원가입**: 이름 + 아이디 + 비밀번호 + 전화번호 SMS 인증 → POST /api/auth/register
+- **로그인**: 아이디 + 비밀번호 → POST /api/auth/login → JWT 발급
+- 전화번호 인증은 가입 시 1회만 (본인 확인용)
 
-## 주요 라우트
-- `/` 대시보드, `/checkout` 판매화면, `/products` 상품관리
-- `/sales` 판매이력, `/statistics` 매출통계
-- API: `/api/products/search`, `/api/checkout`, `/api/stats/*`
+### 권한 체계
+- **사장(owner)**: 모든 기능 접근
+- **직원(staff)**: 사장이 설정한 권한만 (판매, 상품관리, 통계, 환불)
+- DRF Permission 클래스로 구현
 
-## 단위 유형 (`config.py UNIT_TYPES`)
-piece(개), box(박스), can(통), bag(포), meter(m), kg, roll(롤), sheet(장), set(세트)
+### 도매가 처리
+- bulk_threshold 이상 구매 시 bulk_price 적용
+- **3곳 동기화**: 백엔드 판매 API, 프론트 장바구니 계산, 영수증 표시
+
+### 소프트 삭제
+- 상품: is_active=False (실제 삭제 아님)
+- 모든 상품 조회에서 is_active=True 필터
 
 ## UI 언어
-모든 UI 텍스트는 한국어(Korean)
+모든 UI 텍스트는 한국어(Korean). 코드 주석도 한국어 권장.
+
+## 현재 상태
+v3.0 SaaS 전환 작업 중. 기존 코드 삭제 완료, 문서 4개만 남은 상태 (Phase 1 시작 전).
