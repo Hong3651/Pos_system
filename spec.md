@@ -16,6 +16,8 @@
 | 인증 | JWT (access + refresh) + 아이디/비밀번호 + SMS 인증(가입 시) |
 | 호스팅 | Railway/Render (백엔드), Vercel (프론트엔드) |
 | 통신 | REST API (JSON) |
+| 에러 모니터링 | Sentry (백엔드 + 프론트엔드) |
+| CI/CD | GitHub Actions (자동 테스트 + 자동 배포) |
 
 ## 3. 핵심 기능 요구사항
 
@@ -25,6 +27,7 @@
 - JWT 토큰 기반 인증 (access + refresh)
 - 로그인 유지 (refresh token으로 자동 갱신)
 - 전화번호 인증은 가입 시 1회만 (본인 확인용)
+- **로그인 보안**: 5회 연속 실패 시 30분 계정 잠금 (자동 해제)
 
 ### 3.2 가게(Store) 관리
 - **다점포 지원**: 1계정으로 여러 가게 운영 가능
@@ -57,6 +60,8 @@
 - 거스름돈 자동 계산
 - 키보드 단축키 지원
 - **결제 완료 후**: 영수증 발행 / 거래명세서 발행 각각 선택 가능 (둘 다, 하나만, 안 함)
+- **현금영수증**: 현금 결제 시 소비자 요청으로 발급 (전화번호 또는 카드번호 입력)
+- **이중결제 방지**: 거래 고유번호(transaction_id)로 중복 요청 차단 + 결제 상태 추적(pending/approved/failed) + 타임아웃 처리
 
 ### 3.5 상품 관리
 - 상품 등록/수정/삭제 (소프트 삭제)
@@ -73,13 +78,17 @@
 - 카테고리별 매출 비율
 - 현금/카드 결제 비율
 - 기간별 필터링
+- **DailySummary 기반**: 일별 요약 테이블에서 조회 (성능 최적화)
 
 ### 3.7 판매 이력
 - 날짜 범위 필터링
 - 거래 상세 조회
 - **과거 거래에서도 영수증/거래명세서 발행 가능** (이력에서 선택)
-- 환불 처리 (재고 복원)
-- 이중 환불 방지
+- **환불 처리**:
+  - 전체 환불: 전체 금액 환불 + 재고 복원
+  - **부분 환불**: 특정 상품만 선택하여 환불 + 해당 상품 재고 복원 + 금액 재계산
+  - 카드 결제 건: VAN 승인 취소 연동
+  - 이중 환불 방지
 
 ### 3.8 대시보드
 - 오늘 매출 합계 / 거래 건수
@@ -112,6 +121,34 @@
 - 직원 관리
 - 데이터 내보내기 (Excel/CSV)
 
+### 3.12 현금영수증
+- 현금 결제 시 소비자 요청으로 발급
+- 입력 방식: 전화번호 또는 현금영수증 카드번호
+- 국세청 현금영수증 API 연동 (승인번호 발급)
+- 발급 내역 저장 (Sale에 연결)
+- 발급 이력 조회
+
+### 3.13 일마감 / 시재 관리
+- **영업 시작**: 시재(준비 현금) 금액 입력
+- **영업 중**: 현금/카드 매출 자동 집계
+- **일마감**:
+  - 실제 현금 금액 입력 (직접 세서 입력)
+  - 시스템 계산 현금 vs 실제 현금 비교 → 과부족 표시
+  - 카드 매출 합계 확인
+  - 일마감 확정 → DailySummary에 저장
+- 일마감 이력 조회
+
+### 3.14 활동 로그 (감사 추적)
+- 자동 기록 대상:
+  - 환불 처리 (누가, 언제, 어떤 거래)
+  - 상품 가격 변경 (이전 가격 → 새 가격)
+  - 직원 권한 변경
+  - 상품 삭제 (소프트 삭제)
+  - 일마감 처리
+  - 설정 변경
+- 로그 조회: 날짜/직원/활동 유형 필터
+- 사장(owner)만 조회 가능
+
 ## 4. 부가세(VAT) 처리
 - 가격 입력 시 **부가세 포함가** 기준 (소비자가)
 - 영수증/통계에서 **공급가 / 부가세 / 합계** 분리 표시
@@ -123,6 +160,7 @@
 - **현금**: 받은 금액 입력 → 거스름돈 자동 계산
 - **카드**: VAN사 카드 단말기 연동 (실제 결제 처리)
 - **혼합**: 현금 + 카드 분할 결제
+- **현금영수증**: 현금 결제 시 국세청 API 연동 발급
 
 ### 카드 단말기 연동
 - **VAN사**: NICE정보통신 / KIS정보통신 / KSNET (설정에서 선택)
@@ -130,8 +168,12 @@
 - **로컬 에이전트**: VAN사 제공 프로그램을 PC에 설치 필요
 - **기능**:
   - 승인 요청 (결제 금액 전송 → 단말기 카드 투입/터치 대기 → 승인 결과 수신)
-  - 승인 취소 (환불 시)
+  - 승인 취소 (환불 시 — 전체/부분)
   - 승인번호, 카드사명, 카드번호(마스킹) 저장
+- **이중결제 방지**:
+  - 거래별 고유 transaction_id 생성
+  - 결제 상태 추적: pending → approved / failed
+  - 타임아웃 시 자동 승인 조회
 - **오프라인 대응**: 에이전트 미연결 시 금액 기록만 (수동 모드)
 
 ## 6. 업종 프리셋 (10종)
@@ -157,6 +199,8 @@ User (사용자)
 ├── password (해싱 저장)
 ├── phone (전화번호, 고유)
 ├── name
+├── failed_login_count (로그인 실패 횟수)
+├── locked_until (잠금 해제 시각)
 └── created_at
 
 Store (가게)
@@ -204,13 +248,28 @@ Sale (판매)
 ├── store → Store
 ├── staff → User (판매한 직원)
 ├── client → Client (거래처, 선택 — 거래명세서용)
+├── transaction_id (거래 고유번호, UUID — 이중결제 방지)
+├── status (pending / approved / failed)
 ├── total_amount, supply_amount, vat_amount
 ├── payment_method, cash_amount, card_amount, change_amount
 ├── card_approval_no (카드 승인번호)
 ├── card_company (카드사명)
 ├── card_number (카드번호, 마스킹: ****-****-****-1234)
-├── is_refunded
+├── cash_receipt_number (현금영수증 승인번호)
+├── cash_receipt_type (소득공제 / 지출증빙)
+├── is_refunded (전체 환불 여부)
+├── refunded_amount (부분 환불 누적 금액)
 └── memo
+
+SaleItem (판매 항목)
+├── sale → Sale
+├── product → Product
+├── product_name, unit_type (스냅샷)
+├── quantity, unit_price, subtotal
+├── supply_amount, vat_amount
+├── is_bulk
+├── refunded_quantity (부분 환불된 수량)
+└── is_refunded (이 항목 전체 환불 여부)
 
 Invoice (거래명세서)
 ├── sale → Sale
@@ -220,19 +279,43 @@ Invoice (거래명세서)
 ├── issued_date
 └── memo
 
-SaleItem (판매 항목)
-├── sale → Sale
-├── product → Product
-├── product_name, unit_type (스냅샷)
-├── quantity, unit_price, subtotal
+DailySummary (일별 매출 요약)
+├── store → Store
+├── date (날짜, store+date 유니크)
+├── total_sales, total_refunds
+├── cash_sales, card_sales
 ├── supply_amount, vat_amount
-└── is_bulk
+├── transaction_count
+├── opening_cash (시재 — 영업 시작 현금)
+├── expected_cash (시스템 계산 현금)
+├── actual_cash (실제 현금 — 일마감 시 입력)
+├── cash_difference (과부족)
+├── is_closed (일마감 여부)
+└── closed_by → User (마감 처리자)
+
+ActivityLog (활동 로그)
+├── store → Store
+├── user → User (행위자)
+├── action_type (refund / price_change / permission_change / product_delete / daily_close / setting_change)
+├── target_type (Sale / Product / StoreStaff 등)
+├── target_id
+├── detail (JSON: 변경 전/후 데이터)
+└── created_at
 ```
 
 ### 데이터 격리 원칙
 - 모든 가게 데이터 쿼리에 `store_id` 필터 필수
 - API에서 현재 사용자의 가게 소속 여부 검증
 - 다른 가게 데이터 접근 불가
+
+### DB 인덱스 전략
+- Sale: `store_id` + `created_at` (판매 이력 조회)
+- Sale: `transaction_id` (이중결제 방지, UNIQUE)
+- Product: `store_id` + `name` (상품 검색)
+- Product: `store_id` + `barcode` (바코드 검색)
+- DailySummary: `store_id` + `date` (UNIQUE, 통계 조회)
+- ActivityLog: `store_id` + `created_at` (로그 조회)
+- SaleItem: `sale_id` (판매 상세)
 
 ## 8. API 구조 (주요 엔드포인트)
 
@@ -273,7 +356,12 @@ SaleItem (판매 항목)
 - `POST /api/stores/:id/sales` — 판매 처리 (체크아웃)
 - `GET /api/stores/:id/sales` — 판매 이력 (필터/페이징)
 - `GET /api/stores/:id/sales/:saleId` — 판매 상세
-- `POST /api/stores/:id/sales/:saleId/refund` — 환불
+- `POST /api/stores/:id/sales/:saleId/refund` — 환불 (전체)
+- `POST /api/stores/:id/sales/:saleId/partial-refund` — 부분 환불 (항목 선택)
+
+### 현금영수증
+- `POST /api/stores/:id/sales/:saleId/cash-receipt` — 현금영수증 발급
+- `GET /api/stores/:id/cash-receipts` — 현금영수증 발급 이력
 
 ### 통계
 - `GET /api/stores/:id/stats/today` — 오늘 요약
@@ -281,6 +369,12 @@ SaleItem (판매 항목)
 - `GET /api/stores/:id/stats/monthly?year=` — 월별 통계
 - `GET /api/stores/:id/stats/top-products` — 인기 상품
 - `GET /api/stores/:id/stats/categories` — 카테고리별 매출
+
+### 일마감
+- `POST /api/stores/:id/daily-close/open` — 영업 시작 (시재 입력)
+- `GET /api/stores/:id/daily-close/current` — 현재 영업 현황 (실시간 집계)
+- `POST /api/stores/:id/daily-close/close` — 일마감 처리 (실제 현금 입력)
+- `GET /api/stores/:id/daily-close/history` — 일마감 이력
 
 ### 거래처
 - `GET /api/stores/:id/clients` — 거래처 목록 (검색)
@@ -293,6 +387,9 @@ SaleItem (판매 항목)
 - `GET /api/stores/:id/invoices` — 거래명세서 목록 (날짜/거래처 필터)
 - `GET /api/stores/:id/invoices/:invoiceId` — 거래명세서 상세
 
+### 활동 로그
+- `GET /api/stores/:id/activity-logs` — 활동 로그 조회 (날짜/직원/유형 필터)
+
 ### 설정
 - `GET /api/stores/:id/settings` — 가게 설정 조회
 - `PUT /api/stores/:id/settings` — 가게 설정 변경
@@ -304,12 +401,14 @@ SaleItem (판매 항목)
   - 아이디와 동일 불가
   - 아이디와 3글자 이상 연속 겹침 불가
 - 비밀번호 저장: Django 기본 해싱 (PBKDF2)
+- **로그인 보안**: 5회 연속 실패 시 30분 계정 잠금 (자동 해제)
 - SMS 인증코드: 6자리 숫자, 5분 유효, 5회 시도 제한 (가입 시에만)
 - JWT: access token 30분, refresh token 7일
 - 모든 API: 인증 필수 (토큰 검증)
 - 가게 데이터: store_id + 소속 검증 (다른 가게 접근 차단)
 - HTTPS 필수 (호스팅 환경에서 자동 적용)
 - CORS 설정 (프론트엔드 도메인만 허용)
+- **이중결제 방지**: transaction_id 유니크 제약 + 결제 상태 추적
 
 ## 10. 금액 처리 원칙
 - DB에서 금액은 **정수** (원 단위, DECIMAL 또는 INTEGER)
@@ -323,7 +422,10 @@ SaleItem (판매 항목)
 - 데이터 백업: 자동 (호스팅 환경 DB 백업 활용)
 - 한국어 UI
 - 반응형 디자인 (PC + 태블릿 + 모바일)
-- PWA 지원 검토 (오프라인 판매 화면)
+- **PWA 지원**: 오프라인 모드 (인터넷 끊겨도 판매 가능, 복구 시 서버 동기화)
+- **에러 모니터링**: Sentry 연동 (백엔드 API 에러 + 프론트엔드 에러 자동 수집)
+- **CI/CD**: GitHub Actions (push → 자동 테스트 → 통과 시 자동 배포)
+- **테스트**: Phase별 단위/API 테스트 작성
 
 ## 12. 향후 확장 고려사항 (현재 미구현)
 - 요금제/결제 시스템
@@ -331,3 +433,5 @@ SaleItem (판매 항목)
 - 재고 입출고 이력
 - Excel 일괄 상품 등록
 - 알림 (재고 부족, 매출 리포트)
+- 감열 프린터 연동 (ESC/POS)
+- 할인/쿠폰 기능
