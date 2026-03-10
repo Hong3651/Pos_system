@@ -42,7 +42,8 @@
 ### 3.3 직원(Staff) 관리
 - **역할 2단계**: 사장(owner), 직원(staff)
 - 사장이 직원 계정 생성/삭제/권한 관리
-- 직원도 아이디+비밀번호로 로그인 (사장이 계정 생성)
+- 사장이 직원 아이디 + 임시 비밀번호 설정 → 직원 첫 로그인 시 비밀번호 변경 필수
+- 직원도 아이디+비밀번호로 로그인
 - **직원 권한 범위**:
   - 판매(체크아웃): 기본 허용
   - 상품 등록/수정: 사장이 허용/차단 설정
@@ -201,6 +202,7 @@ User (사용자)
 ├── name
 ├── failed_login_count (로그인 실패 횟수)
 ├── locked_until (잠금 해제 시각)
+├── must_change_password (첫 로그인 시 비밀번호 변경 필요 — 직원용)
 └── created_at
 
 Store (가게)
@@ -293,6 +295,25 @@ DailySummary (일별 매출 요약)
 ├── is_closed (일마감 여부)
 └── closed_by → User (마감 처리자)
 
+Refund (환불)
+├── sale → Sale
+├── store → Store
+├── staff → User (환불 처리자)
+├── refund_type (full / partial)
+├── total_refund_amount (환불 총액)
+├── supply_amount, vat_amount (환불 공급가/부가세)
+├── reason (환불 사유)
+├── card_cancel_no (카드 취소 승인번호, 카드 결제 건만)
+└── created_at
+
+RefundItem (환불 항목)
+├── refund → Refund
+├── sale_item → SaleItem
+├── quantity (환불 수량)
+├── refund_amount (환불 금액)
+├── supply_amount, vat_amount
+└── created_at
+
 ActivityLog (활동 로그)
 ├── store → Store
 ├── user → User (행위자)
@@ -316,6 +337,8 @@ ActivityLog (활동 로그)
 - DailySummary: `store_id` + `date` (UNIQUE, 통계 조회)
 - ActivityLog: `store_id` + `created_at` (로그 조회)
 - SaleItem: `sale_id` (판매 상세)
+- Refund: `store_id` + `created_at` (환불 이력 조회)
+- Refund: `sale_id` (특정 판매의 환불 조회)
 
 ## 8. API 구조 (주요 엔드포인트)
 
@@ -333,7 +356,7 @@ ActivityLog (활동 로그)
 - `GET /api/stores/:id` — 가게 상세
 
 ### 직원
-- `POST /api/stores/:id/staff` — 직원 추가 (전화번호로)
+- `POST /api/stores/:id/staff` — 직원 추가 (사장이 아이디+임시비밀번호 생성)
 - `GET /api/stores/:id/staff` — 직원 목록
 - `PUT /api/stores/:id/staff/:userId` — 권한 변경
 - `DELETE /api/stores/:id/staff/:userId` — 직원 제거
@@ -358,6 +381,8 @@ ActivityLog (활동 로그)
 - `GET /api/stores/:id/sales/:saleId` — 판매 상세
 - `POST /api/stores/:id/sales/:saleId/refund` — 환불 (전체)
 - `POST /api/stores/:id/sales/:saleId/partial-refund` — 부분 환불 (항목 선택)
+- `GET /api/stores/:id/refunds` — 환불 이력 (날짜/직원 필터)
+- `GET /api/stores/:id/refunds/:refundId` — 환불 상세
 
 ### 현금영수증
 - `POST /api/stores/:id/sales/:saleId/cash-receipt` — 현금영수증 발급
@@ -423,6 +448,7 @@ ActivityLog (활동 로그)
 - 한국어 UI
 - 반응형 디자인 (PC + 태블릿 + 모바일)
 - **PWA 지원**: 오프라인 모드 (인터넷 끊겨도 판매 가능, 복구 시 서버 동기화)
+  - 동기화 충돌 전략: **서버 우선** (서버 재고 기준으로 차감, 재고 부족 시 관리자 알림, 판매 기록은 보존)
 - **에러 모니터링**: Sentry 연동 (백엔드 API 에러 + 프론트엔드 에러 자동 수집)
 - **CI/CD**: GitHub Actions (push → 자동 테스트 → 통과 시 자동 배포)
 - **테스트**: Phase별 단위/API 테스트 작성
